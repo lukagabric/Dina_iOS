@@ -16,6 +16,12 @@ class ViewController: UIViewController {
     @IBOutlet private weak var linePathButton: UIButton!
     private var joystickTimer: Timer?
     
+    private var isSerialConnected: Bool = false {
+        didSet {
+            updateView()
+        }
+    }
+    
     enum Mode {
         case path
         case joystick
@@ -28,6 +34,7 @@ class ViewController: UIViewController {
     }
     
     private var currentJoystickCommand: String?
+    private var lastSentJoystickCommand: String?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -96,8 +103,11 @@ class ViewController: UIViewController {
     
     private func startJoystickTimer() {
         joystickTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self, self.mode == .joystick, let currentJoystickCommand = self.currentJoystickCommand else { return }
+            guard let self = self, self.mode == .joystick, let currentJoystickCommand = self.currentJoystickCommand, currentJoystickCommand != self.lastSentJoystickCommand else { return }
+            print(currentJoystickCommand)
             self.serial.sendMessageToDevice(currentJoystickCommand)
+            self.lastSentJoystickCommand = currentJoystickCommand
+            self.currentJoystickCommand = nil
         }
     }
         
@@ -110,6 +120,8 @@ class ViewController: UIViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.updateView()
             if self.mode == .joystick {
+                self.serial.sendMessageToDevice("0,0,0,")
+                self.lastSentJoystickCommand = "0,0,0,"
                 self.startJoystickTimer()
             } else {
                 self.freeJoystickTimer()
@@ -120,8 +132,12 @@ class ViewController: UIViewController {
     }
     
     private func updateView() {
-        joystick.isHidden = mode == .path
+        updateJoystickVisibility()
         linePathButton.setTitle(mode == .joystick ? "Activate line path mode" : "Activate joystick mode", for: .normal)
+    }
+    
+    private func updateJoystickVisibility() {
+        joystick.isHidden = mode != .joystick || !isSerialConnected
     }
     
 }
@@ -134,7 +150,7 @@ extension ViewController: BluetoothSerialDelegate {
     }
     
     func serialDidDisconnect(_ peripheral: CBPeripheral, error: NSError?) {
-        joystick.isHidden = true
+        isSerialConnected = false
         serial.startScan()
     }
     
@@ -143,6 +159,6 @@ extension ViewController: BluetoothSerialDelegate {
     }
     
     func serialIsReady(_ peripheral: CBPeripheral) {
-        joystick.isHidden = false
+        isSerialConnected = true
     }
 }
